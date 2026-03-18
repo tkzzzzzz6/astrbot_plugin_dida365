@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import time
 from collections.abc import Awaitable, Callable
+from copy import deepcopy
 from dataclasses import dataclass, field, replace
 from datetime import date, datetime, timedelta
 from datetime import time as dt_time
@@ -273,6 +274,7 @@ class DidaTaskOpsCoordinator:
 
     PENDING_CONFIRMATION_PREFIX = "pending_task_op"
     MAX_BATCH_TASKS = 10
+    _PENDING_PLAN_CACHE: dict[str, dict[str, Any]] = {}
 
     def __init__(
         self,
@@ -317,19 +319,25 @@ class DidaTaskOpsCoordinator:
             )
 
         if plan.expires_at_ts and time.time() > plan.expires_at_ts:
-            await self._delete_kv_data(self._pending_key(event))
+            pending_key = self._pending_key(event)
+            await self._delete_kv_data(pending_key)
+            self._PENDING_PLAN_CACHE.pop(pending_key, None)
             raise DidaConfirmationError(
                 "The pending Dida365 task operation confirmation has expired. Please run /dida_do again.",
             )
 
-        await self._delete_kv_data(self._pending_key(event))
+        pending_key = self._pending_key(event)
+        await self._delete_kv_data(pending_key)
+        self._PENDING_PLAN_CACHE.pop(pending_key, None)
         return await self._execute_plan(plan, confirmed=True)
 
     async def cancel_pending(self, event) -> str:
         plan = await self._load_pending_confirmation(event)
         if not plan:
             return "There is no pending Dida365 task operation to cancel in this chat."
-        await self._delete_kv_data(self._pending_key(event))
+        pending_key = self._pending_key(event)
+        await self._delete_kv_data(pending_key)
+        self._PENDING_PLAN_CACHE.pop(pending_key, None)
         return (
             "Cancelled the pending Dida365 task operation.\n"
             f"- action: {plan.action}\n"
@@ -1487,24 +1495,67 @@ class DidaTaskOpsCoordinator:
         now = time.time()
         plan.created_at_ts = now
         plan.expires_at_ts = now + float(self.settings.confirmation_timeout_seconds)
-        await self._put_kv_data(self._pending_key(event), plan.to_dict())
+        pending_key = self._pending_key(event)
+        self._PENDING_PLAN_CACHE[pending_key] = deepcopy(plan.to_dict())
+        await self._put_kv_data(
+            pending_key,
+            self._sanitize_plan_dict_for_persistence(plan.to_dict()),
+        )
 
     async def _load_pending_confirmation(self, event) -> DidaExecutionPlan | None:
-        data = await self._get_kv_data(self._pending_key(event), None)
+        pending_key = self._pending_key(event)
+        data = self._PENDING_PLAN_CACHE.get(pending_key)
+        if data is None:
+            data = await self._get_kv_data(pending_key, None)
         if not data:
             return None
         if not isinstance(data, dict):
-            await self._delete_kv_data(self._pending_key(event))
+            await self._delete_kv_data(pending_key)
+            self._PENDING_PLAN_CACHE.pop(pending_key, None)
             raise DidaConfirmationError(
                 "Stored Dida365 confirmation data is invalid and has been cleared.",
             )
-        return DidaExecutionPlan.from_dict(data)
+        plan = DidaExecutionPlan.from_dict(data)
+        if self._plan_requires_ephemeral_content(plan):
+            raise DidaConfirmationError(
+                "The pending Dida365 task operation contains sensitive content that was not persisted. Please run /dida_do again.",
+            )
+        return plan
 
     def _pending_key(self, event) -> str:
         sender_id = str(getattr(event, "get_sender_id", lambda: "")() or "session")
         return (
             f"{self.PENDING_CONFIRMATION_PREFIX}:{event.unified_msg_origin}:{sender_id}"
         )
+
+    @staticmethod
+    def _sanitize_plan_dict_for_persistence(
+        plan_dict: dict[str, Any],
+    ) -> dict[str, Any]:
+        sanitized = deepcopy(plan_dict)
+        sanitized["request_text"] = ""
+
+        create_task = sanitized.get("create_task_meta")
+        if isinstance(create_task, dict):
+            create_task["content"] = ""
+
+        update_task = sanitized.get("update_task")
+        if isinstance(update_task, dict):
+            update_task["content"] = ""
+
+        return sanitized
+
+    @staticmethod
+    def _plan_requires_ephemeral_content(plan: DidaExecutionPlan) -> bool:
+        if plan.create_task and plan.create_task.content:
+            return True
+        if (
+            plan.update_task
+            and plan.update_task.has_content_change
+            and plan.update_task.content
+        ):
+            return True
+        return False
 
     def _render_confirmation_request(self, plan: DidaExecutionPlan) -> str:
         seconds_left = max(0, int(plan.expires_at_ts - time.time()))

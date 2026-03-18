@@ -25,15 +25,6 @@ from .types import (
     DidaTaskWithProject,
 )
 
-
-def _mask(value: str) -> str:
-    if not value:
-        return "(not set)"
-    if len(value) <= 6:
-        return "*" * len(value)
-    return f"{value[:3]}...{value[-3:]}"
-
-
 _MARKDOWN_ESCAPE_PATTERN = re.compile(r"([\\`*_{}\[\]()#+!|>])")
 
 
@@ -55,26 +46,14 @@ class DidaService:
     def build_status_summary(self) -> str:
         return (
             "Dida365 plugin loaded\n"
-            f"- access_token: {_mask(self.settings.access_token)}\n"
-            "- access_token_validity_hint: usually about 180 days\n"
-            "- token_refresh: disabled (update access_token manually)\n"
-            f"- api_base_url: {self.settings.api_base_url or '(not set)'}\n"
-            f"- default_project: {self.settings.default_project or '(not set)'}\n"
-            f"- request_timeout_seconds: {self.settings.request_timeout_seconds}\n"
+            f"- auth_configured: {bool(self.settings.access_token.strip())}\n"
+            f"- api_base_url_configured: {bool(self.settings.api_base_url.strip())}\n"
+            f"- default_project_configured: {bool(self.settings.default_project.strip())}\n"
             f"- timezone: {self.settings.timezone}\n"
-            f"- enable_daily_briefing: {self.settings.enable_daily_briefing}\n"
-            f"- morning_report_time: {self.settings.morning_report_time or '(not set)'}\n"
-            f"- evening_report_time: {self.settings.evening_report_time or '(not set)'}\n"
-            f"- report_target (config): {self.settings.report_target or '(not set)'}\n"
-            f"- enable_today_report: {self.settings.enable_today_report}\n"
-            f"- enable_unfinished_report: {self.settings.enable_unfinished_report}\n"
-            f"- report_mode: {self.settings.report_mode}\n"
-            f"- llm_max_tasks: {self.settings.llm_max_tasks}\n"
-            f"- include_overdue_in_today_report: {self.settings.include_overdue_in_today_report}\n"
-            f"- enable_llm_task_ops: {self.settings.enable_llm_task_ops}\n"
-            f"- confirm_low_risk_writes: {self.settings.confirm_low_risk_writes}\n"
-            f"- confirm_high_risk_writes: {self.settings.confirm_high_risk_writes}\n"
-            f"- confirmation_timeout_seconds: {self.settings.confirmation_timeout_seconds}"
+            f"- daily_briefing_enabled: {self.settings.enable_daily_briefing}\n"
+            f"- llm_task_ops_enabled: {self.settings.enable_llm_task_ops}\n"
+            "- access_token_validity_hint: usually about 180 days\n"
+            "- token_refresh: disabled (update access_token manually)"
         )
 
     async def probe_read_access(self) -> str:

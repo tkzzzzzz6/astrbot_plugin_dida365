@@ -17,6 +17,23 @@ from .exceptions import (
 )
 from .types import DidaPluginSettings, DidaProject, DidaProjectData, DidaTask
 
+_SENSITIVE_PAYLOAD_KEYS = {"title", "content", "desc", "description", "note"}
+
+
+def _sanitize_log_payload(value: Any) -> Any:
+    if isinstance(value, dict):
+        sanitized: dict[str, Any] = {}
+        for key, item in value.items():
+            if str(key).casefold() in _SENSITIVE_PAYLOAD_KEYS:
+                sanitized[key] = "***"
+            else:
+                sanitized[key] = _sanitize_log_payload(item)
+        return sanitized
+    if isinstance(value, list):
+        return [_sanitize_log_payload(item) for item in value]
+    return value
+
+
 _TOKEN_FIELD_PATTERN = re.compile(
     r"""(?P<key>access_token|Authorization|invalid access token)(?P<sep>["'=: ]+)(?P<value>[^",\s}]+|"[^"]*"|'[^']*')""",
     re.IGNORECASE,
@@ -108,7 +125,12 @@ class DidaClient:
                 "Dida365 API request %s %s payload=%s",
                 method.upper(),
                 path,
-                _redact_sensitive_text(json.dumps(json_body, ensure_ascii=False)),
+                _redact_sensitive_text(
+                    json.dumps(
+                        _sanitize_log_payload(json_body),
+                        ensure_ascii=False,
+                    )
+                ),
             )
         try:
             async with aiohttp.ClientSession(
