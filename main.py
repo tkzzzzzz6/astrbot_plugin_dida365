@@ -8,6 +8,7 @@ from astrbot.api.star import Context, Star
 from astrbot.core.message.message_event_result import MessageChain
 
 from .client import DidaClient
+from .llm_ops import _DEFAULT_LLM_TASK_OPS_PROMPT
 from .reporting import DidaReportingCoordinator
 from .service import DidaService
 from .task_ops import DidaTaskOpsCoordinator
@@ -25,6 +26,7 @@ class Main(Star):
         self.config = config
 
     async def initialize(self) -> None:
+        self._ensure_visible_prompt_defaults()
         await self._sync_report_jobs()
 
     async def terminate(self) -> None:
@@ -67,6 +69,13 @@ class Main(Star):
 
     def _plugin_store_id(self) -> str:
         return getattr(self, "plugin_id", "astrbot_plugin_dida365")
+
+    def _ensure_visible_prompt_defaults(self) -> None:
+        llm_task_ops_prompt = str(self.config.get("llm_task_ops_prompt", "") or "")
+        if llm_task_ops_prompt.strip():
+            return
+        self.config["llm_task_ops_prompt"] = _DEFAULT_LLM_TASK_OPS_PROMPT
+        self.config.save_config()
 
     async def _get_bound_report_target(self) -> str:
         value = await self.get_kv_data(self.REPORT_TARGET_KV_KEY, "")

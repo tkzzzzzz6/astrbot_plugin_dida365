@@ -89,7 +89,7 @@ data/plugins/astrbot_plugin_dida365/config.example.jsonc
 | 配置项 | 是否必填 | 作用 | 说明 |
 | --- | --- | --- | --- |
 | `enable_llm_task_ops` | 否 | 启用自然语言任务操作 | 开启后 `/dida_do` 才能使用 |
-| `llm_task_ops_prompt` | 否 | 自定义意图解析 Prompt | 插件管理界面中默认已经预填内置 Prompt 全文，可直接查看和修改 |
+| `llm_task_ops_prompt` | 否 | 自定义意图解析 Prompt | 插件首次启动或检测到历史空值配置时，会自动写入内置 Prompt 全文，便于直接查看和修改 |
 | `confirm_low_risk_writes` | 否 | 低风险写操作是否需要确认 | 影响 `create_task`、`complete_task`、`update_task` |
 | `confirm_high_risk_writes` | 否 | 高风险写操作是否需要确认 | 影响 `move_task`、`delete_task` |
 | `confirmation_timeout_seconds` | 否 | 等待确认超时 | 单位为秒 |
@@ -238,7 +238,7 @@ data/plugins/astrbot_plugin_dida365/config.example.jsonc
 
 ### 关于默认 LLM Prompt
 
-插件管理界面的 `llm_task_ops_prompt` 配置项中，默认已经预填内置 Prompt 全文。你可以：
+插件管理界面的 `llm_task_ops_prompt` 配置项中，插件首次启动或检测到历史空值配置时，会自动写入内置 Prompt 全文。你可以：
 - 直接查看默认 Prompt
 - 在原 Prompt 基础上微调
 - 清空后恢复使用插件代码中的同款默认 Prompt
