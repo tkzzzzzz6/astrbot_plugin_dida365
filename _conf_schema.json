@@ -8,7 +8,8 @@
   "api_base_url": {
     "description": "Dida365 Open API 基础地址",
     "type": "string",
-    "default": "https://api.dida365.com/open/v1"
+    "default": "https://api.dida365.com/open/v1",
+    "hint": "通常保持默认值 https://api.dida365.com/open/v1。只有在 Dida365 官方文档明确要求切换接口地址时，才需要修改。"
   },
   "default_project": {
     "description": "默认项目名称或项目 ID",
@@ -52,12 +53,14 @@
   "enable_today_report": {
     "description": "启用今日任务早报",
     "type": "bool",
-    "default": true
+    "default": true,
+    "hint": "控制是否发送“今日任务早报”。需要先开启 enable_daily_briefing，并设置 morning_report_time。"
   },
   "enable_unfinished_report": {
     "description": "启用未完成任务晚报",
     "type": "bool",
-    "default": true
+    "default": true,
+    "hint": "控制是否发送“未完成任务晚报”。需要先开启 enable_daily_briefing，并设置 evening_report_time。"
   },
   "report_mode": {
     "description": "定时汇报模式",
@@ -75,7 +78,7 @@
   },
   "llm_report_prompt": {
     "description": "LLM 汇报模式自定义 Prompt",
-    "type": "string",
+    "type": "text",
     "default": "",
     "hint": "可选。若已配置，可使用 {structured_report_input} 占位符。"
   },
@@ -88,7 +91,8 @@
   "include_overdue_in_today_report": {
     "description": "今日汇报中包含逾期未完成任务",
     "type": "bool",
-    "default": false
+    "default": false,
+    "hint": "开启后，今日早报除了今天到期的任务，还会额外包含已经逾期但仍未完成的任务。关闭后只汇报今天到期的任务。"
   },
   "enable_llm_task_ops": {
     "description": "启用基于 LLM 的自然语言任务操作",
@@ -98,7 +102,7 @@
   },
   "llm_task_ops_prompt": {
     "description": "自然语言任务操作 Prompt（默认已预填）",
-    "type": "string",
+    "type": "text",
     "default": "You are a Dida365 task operation intent parser.\nYour only job is to convert the user's natural-language instruction into one JSON object.\nDo not explain your reasoning. Do not wrap the JSON in Markdown unless required by the model.\nThis phase supports these executable actions: create_task, complete_task, update_task, move_task, delete_task.\nIf the user asks for another unsupported action, still report the best matching action name, but do not rewrite it into a supported action.\n\nRules:\n1. Output exactly one JSON object.\n2. Never invent missing facts. Leave unknown fields as empty strings and use an empty object for update_fields when needed.\n3. For create_task, put the new task title in title.\n4. For complete_task, update_task, move_task, and delete_task, put the task reference phrase in target_task_query.\n5. project should be the current/source project name or identifier only if the user explicitly mentions it and it helps disambiguate the task.\n6. target_project should only be used for move_task.\n7. due_date must use YYYY-MM-DD when only a date is known.\n8. due_datetime must use YYYY-MM-DD HH:MM when a specific local time is known.\n9. The top-level priority and content fields are only for create_task.\n10. For update_task, put only changed fields into update_fields. Supported keys are due_date, due_datetime, priority, and content.\n11. confidence should be a number between 0 and 1.\n12. ambiguity_reason should explain what is unclear, or be an empty string.\n13. risk_level should be \"low\" for create_task, complete_task, update_task. risk_level should be \"high\" for move_task and delete_task.\n14. When the user says to cancel, remove, delete, drop, or no longer do an existing task, prefer delete_task, not create_task.\n15. If the user refers to an existing task using labels like \"Task: Wash up\", \"任务: 洗澡\", or quoted text, copy the referenced task text into target_task_query without the label prefix when possible.\n16. If the user says to cancel a previously planned task, and the instruction is about the existing task itself rather than the pending confirmation flow, treat it as delete_task.\n17. If the user changes a task to a date or time, such as \"move it to tomorrow\", \"改到明天\", \"推迟到周五\", or \"改到晚上十一点\", treat that as update_task with due_date or due_datetime, not move_task.\n18. Use move_task only when the target is another project, list, or folder. If there is no target project or list, do not use move_task.\n\nReturn this JSON shape:\n{\n  \"action\": \"create_task\",\n  \"risk_level\": \"low\",\n  \"title\": \"\",\n  \"target_task_query\": \"\",\n  \"project\": \"\",\n  \"target_project\": \"\",\n  \"due_date\": \"\",\n  \"due_datetime\": \"\",\n  \"priority\": \"\",\n  \"content\": \"\",\n  \"update_fields\": {\n    \"due_date\": \"\",\n    \"due_datetime\": \"\",\n    \"priority\": \"\",\n    \"content\": \"\"\n  },\n  \"requires_confirmation\": false,\n  \"confidence\": 0.0,\n  \"ambiguity_reason\": \"\"\n}\n\nCurrent local time: {current_time}\nCurrent timezone: {timezone}\nUser instruction:\n{user_instruction}\n",
     "hint": "插件管理界面中默认已经展示内置 Prompt。你可以直接查看、复制或按需修改。支持占位符：{current_time}、{timezone}、{user_instruction}。"
   },
@@ -117,6 +121,7 @@
   "confirmation_timeout_seconds": {
     "description": "确认等待超时（秒）",
     "type": "int",
-    "default": 180
+    "default": 180,
+    "hint": "从插件发出确认请求开始计时。超过这个时间后，/dida_confirm 将失效，需要重新执行 /dida_do。"
   }
 }
