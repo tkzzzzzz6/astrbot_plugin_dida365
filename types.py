@@ -213,4 +213,5 @@ class DidaStructuredReport:
     summary_counts: dict[str, int]
     tasks: list[DidaReportTaskView]
     total_task_count: int
+    data_warning: str = ""
     truncated_task_count: int = 0

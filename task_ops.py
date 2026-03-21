@@ -846,7 +846,7 @@ class DidaTaskOpsCoordinator:
                 f"The parsed Dida365 {action} intent is missing target_task_query.",
             )
 
-        candidate_items = await self.service.list_unfinished_tasks()
+        candidate_items = await self.service.list_unfinished_tasks(strict_fetch=True)
         if not candidate_items:
             raise DidaValidationError(
                 "No unfinished Dida365 tasks are available for matching."

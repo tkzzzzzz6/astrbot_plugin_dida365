@@ -42,18 +42,16 @@ class DidaService:
     ) -> None:
         self.settings = settings
         self.client = client or DidaClient(settings)
+        self._last_partial_fetch_warning = ""
 
     def build_status_summary(self) -> str:
         return (
-            "滴答清单插件已加载\n"
+            "滴答清单连接器已加载\n"
             f"- 已配置访问令牌: {bool(self.settings.access_token.strip())}\n"
-            f"- 已配置 API 地址: {bool(self.settings.api_base_url.strip())}\n"
-            f"- 已配置默认项目: {bool(self.settings.default_project.strip())}\n"
-            f"- 时区: {self.settings.timezone}\n"
             f"- 已开启主动汇报: {self.settings.enable_daily_briefing}\n"
             f"- 已开启自然语言任务操作: {self.settings.enable_llm_task_ops}\n"
             "- Access Token 有效期提示: 通常约 180 天\n"
-            "- 自动刷新 Access Token: 未启用，请手动更新"
+            "- Access Token 过期后请手动更新插件配置"
         )
 
     async def probe_read_access(self) -> str:
@@ -106,10 +104,15 @@ class DidaService:
     async def list_today_tasks_summary(self) -> str:
         today = self._today()
         today_tasks = await self.list_today_tasks(today=today)
+        warning = self._consume_partial_fetch_warning()
         if not today_tasks:
+            if warning:
+                return f"今天没有到期任务（{today.isoformat()}）。\n注意：{warning}"
             return f"今天没有到期任务（{today.isoformat()}）。"
 
-        lines = [f"今日到期任务（{today.isoformat()}）: {len(today_tasks)}"]
+        lines = [f"今日到期任务（{today.isoformat()}）：{len(today_tasks)}"]
+        if warning:
+            lines.append(f"注意：{warning}")
         task_blocks = [
             self._format_task_block_from_item(item)
             for item in today_tasks[: self.TODAY_DISPLAY_LIMIT]
@@ -140,7 +143,10 @@ class DidaService:
 
     async def list_unfinished_tasks_summary(self) -> str:
         unfinished_tasks = await self.list_unfinished_tasks()
+        warning = self._consume_partial_fetch_warning()
         if not unfinished_tasks:
+            if warning:
+                return f"没有未完成任务。\n注意：{warning}"
             return "没有未完成任务。"
 
         overdue_count = sum(
@@ -153,11 +159,13 @@ class DidaService:
         )
 
         lines = [
-            f"未完成任务数: {len(unfinished_tasks)}",
-            f"- 逾期任务: {overdue_count}",
-            f"- 无截止日期: {no_due_count}",
-            "- 当前展示: 按紧急程度排序的前 30 条",
+            f"未完成任务数：{len(unfinished_tasks)}",
+            f"- 逾期任务：{overdue_count}",
+            f"- 无截止日期：{no_due_count}",
+            "- 当前展示：按紧急程度排序的前 30 条",
         ]
+        if warning:
+            lines.append(f"- 注意：{warning}")
         task_blocks = [
             self._format_task_block_from_item(item, include_overdue=True)
             for item in unfinished_tasks[: self.UNFINISHED_DISPLAY_LIMIT]
@@ -170,8 +178,12 @@ class DidaService:
             lines.extend(["", f"... 还有 {remaining} 条未完成任务未展示"])
         return "\n\n".join(lines)
 
-    async def list_unfinished_tasks(self) -> list[DidaTaskWithProject]:
-        tasks = await self._collect_all_task_items()
+    async def list_unfinished_tasks(
+        self,
+        *,
+        strict_fetch: bool = False,
+    ) -> list[DidaTaskWithProject]:
+        tasks = await self._collect_all_task_items(strict=strict_fetch)
         unfinished_tasks = [item for item in tasks if not self._is_completed(item.task)]
         unfinished_tasks.sort(
             key=lambda item: (
@@ -192,6 +204,7 @@ class DidaService:
         max_tasks: int | None = None,
     ) -> DidaStructuredReport:
         all_items = await self._collect_all_task_items()
+        warning = self._consume_partial_fetch_warning()
         now = self._normalize_now(now)
         today_value = now.date()
         selected_items = [
@@ -243,6 +256,7 @@ class DidaService:
             },
             tasks=report_tasks,
             total_task_count=total_count,
+            data_warning=warning,
             truncated_task_count=truncated_count,
         )
 
@@ -254,6 +268,7 @@ class DidaService:
     ) -> DidaStructuredReport:
         now = self._normalize_now(now)
         selected_items = await self.list_unfinished_tasks()
+        warning = self._consume_partial_fetch_warning()
         total_count = len(selected_items)
         report_tasks = [self._make_report_task_view(item) for item in selected_items]
         overdue_count = sum(1 for item in selected_items if self._is_overdue(item.task))
@@ -281,6 +296,7 @@ class DidaService:
             },
             tasks=report_tasks,
             total_task_count=total_count,
+            data_warning=warning,
             truncated_task_count=truncated_count,
         )
 
@@ -299,6 +315,8 @@ class DidaService:
             f"今日到期: {report.summary_counts.get('due_today_count', 0)}",
             f"无截止日期: {report.summary_counts.get('no_due_date_count', 0)}",
         ]
+        if report.data_warning:
+            lines.append(f"??: {report.data_warning}")
         if not report.tasks:
             lines.extend(["", "没有任务符合本次汇报条件。"])
             return "\n".join(lines)
@@ -325,12 +343,16 @@ class DidaService:
             f"selection_rule: {report.selection_rule}",
             f"sorting_rule: {report.sorting_rule}",
             f"task_count: {report.total_task_count}",
+        ]
+        if report.data_warning:
+            lines.append(f"data_warning: {report.data_warning}")
+        lines.extend([
             "",
             "[SUMMARY]",
             f"overdue_count: {report.summary_counts.get('overdue_count', 0)}",
             f"due_today_count: {report.summary_counts.get('due_today_count', 0)}",
             f"no_due_date_count: {report.summary_counts.get('no_due_date_count', 0)}",
-        ]
+        ])
         if report.truncated_task_count:
             lines.append(f"truncated_task_count: {report.truncated_task_count}")
         lines.extend(["", "[TASKS]"])
@@ -353,23 +375,27 @@ class DidaService:
             )
         return "\n".join(lines).rstrip()
 
-    async def _collect_all_task_items(self) -> list[DidaTaskWithProject]:
+    async def _collect_all_task_items(
+        self,
+        *,
+        strict: bool = False,
+    ) -> list[DidaTaskWithProject]:
         projects = await self.client.list_projects()
+        self._last_partial_fetch_warning = ""
         if not projects:
             return []
 
+        active_projects = [project for project in projects if project.id]
         project_results = await asyncio.gather(
-            *[
-                self.client.get_project_data(project.id)
-                for project in projects
-                if project.id
-            ],
+            *[self.client.get_project_data(project.id) for project in active_projects],
             return_exceptions=True,
         )
 
         successful_results = []
-        for result in project_results:
+        failed_project_ids: list[str] = []
+        for project, result in zip(active_projects, project_results, strict=False):
             if isinstance(result, Exception):
+                failed_project_ids.append(project.id)
                 continue
             successful_results.append(result)
 
@@ -377,6 +403,18 @@ class DidaService:
             first_error = project_results[0]
             if isinstance(first_error, Exception):
                 raise first_error
+
+        if failed_project_ids:
+            project_preview = ", ".join(failed_project_ids[:3])
+            if len(failed_project_ids) > 3:
+                project_preview = f"{project_preview}, ..."
+            self._last_partial_fetch_warning = (
+                f"有 {len(failed_project_ids)} 个项目读取失败，结果可能不完整（{project_preview}）"
+            )
+            if strict:
+                raise DidaApiError(
+                    f"{self._last_partial_fetch_warning}。为避免误操作，本次任务匹配已终止。"
+                )
 
         task_items: list[DidaTaskWithProject] = []
         for project_data in successful_results:
@@ -398,6 +436,11 @@ class DidaService:
                     )
                 )
         return task_items
+
+    def _consume_partial_fetch_warning(self) -> str:
+        warning = self._last_partial_fetch_warning
+        self._last_partial_fetch_warning = ""
+        return warning
 
     def _timezone_name(self) -> str:
         return self.settings.timezone

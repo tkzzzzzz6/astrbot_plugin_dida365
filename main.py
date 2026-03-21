@@ -222,71 +222,73 @@ class Main(Star):
             job_map[report_type] = job
 
         lines = [
-            "Dida365 report status",
-            f"- enable_daily_briefing: {settings.enable_daily_briefing}",
-            f"- report_mode: {settings.report_mode}",
-            f"- timezone: {timezone}",
-            f"- bound_report_target: {bound_target or '(not set)'}",
-            f"- report_target (config): {settings.report_target or '(not set)'}",
-            f"- effective_report_target: {effective_target or '(not set)'}",
-            f"- enable_today_report: {settings.enable_today_report}",
-            f"- morning_report_time: {settings.morning_report_time or '(not set)'}",
+            "滴答清单汇报状态",
+            f"- 已启用主动汇报: {settings.enable_daily_briefing}",
+            f"- 汇报模式: {settings.report_mode}",
+            f"- 时区: {timezone}",
+            f"- 已绑定汇报目标: {bool(bound_target)}",
+            f"- 已配置汇报目标: {bool(settings.report_target)}",
+            f"- 当前存在有效汇报目标: {bool(effective_target)}",
+            f"- 启用今日任务早报: {settings.enable_today_report}",
+            f"- 早报时间: {settings.morning_report_time or '(未设置)'}",
             (
-                f"- morning_report_time_valid: "
+                f"- 早报时间有效: "
                 f"{bool(reporting.parse_report_time(settings.morning_report_time))}"
             ),
-            f"- enable_unfinished_report: {settings.enable_unfinished_report}",
-            f"- evening_report_time: {settings.evening_report_time or '(not set)'}",
+            f"- 启用未完成任务晚报: {settings.enable_unfinished_report}",
+            f"- 晚报时间: {settings.evening_report_time or '(未设置)'}",
             (
-                f"- evening_report_time_valid: "
+                f"- 晚报时间有效: "
                 f"{bool(reporting.parse_report_time(settings.evening_report_time))}"
             ),
-            f"- llm_max_tasks: {settings.llm_max_tasks}",
+            f"- LLM 汇报最多包含任务数: {settings.llm_max_tasks}",
             (
-                f"- include_overdue_in_today_report: "
+                f"- 今日汇报包含逾期任务: "
                 f"{settings.include_overdue_in_today_report}"
             ),
-            f"- enable_llm_task_ops: {settings.enable_llm_task_ops}",
-            f"- confirm_low_risk_writes: {settings.confirm_low_risk_writes}",
-            f"- confirm_high_risk_writes: {settings.confirm_high_risk_writes}",
+            f"- 启用自然语言任务操作: {settings.enable_llm_task_ops}",
+            f"- 低风险写操作需要确认: {settings.confirm_low_risk_writes}",
+            f"- 高风险写操作需要确认: {settings.confirm_high_risk_writes}",
             (
-                f"- confirmation_timeout_seconds: "
+                f"- 确认等待超时（秒）: "
                 f"{settings.confirmation_timeout_seconds}"
             ),
         ]
         if settings.report_mode == "llm":
             lines.append(
                 (
-                    f"- llm_report_prompt: "
-                    f"{'custom' if settings.llm_report_prompt.strip() else 'default'}"
+                    f"- 汇报 Prompt: "
+                    f"{'自定义' if settings.llm_report_prompt.strip() else '默认'}"
                 ),
             )
         lines.append(
             (
-                f"- llm_task_ops_prompt: "
-                f"{'custom' if settings.llm_task_ops_prompt.strip() else 'default'}"
+                f"- 任务操作 Prompt: "
+                f"{'自定义' if settings.llm_task_ops_prompt.strip() else '默认'}"
             ),
         )
 
         if job_map:
-            lines.append("- scheduled_jobs:")
+            lines.append("- 已注册定时任务:")
             for report_type in ("today", "unfinished"):
                 job = job_map.get(report_type)
                 if not job:
                     continue
                 next_run = (
-                    job.next_run_time.isoformat() if job.next_run_time else "(none)"
+                    job.next_run_time.isoformat() if job.next_run_time else "(无)"
                 )
                 lines.append(f"  - {report_type}: next_run={next_run}")
         else:
-            lines.append("- scheduled_jobs: (none)")
+            lines.append("- 已注册定时任务: (无)")
         return "\n".join(lines)
 
+    @filter.permission_type(filter.PermissionType.ADMIN)
     @filter.command("dida_ping")
     async def dida_ping(self, event: AstrMessageEvent):
         """Check whether the Dida365 plugin is loaded."""
         yield event.plain_result(self._build_service().build_status_summary())
 
+    @filter.permission_type(filter.PermissionType.ADMIN)
     @filter.command("dida_probe")
     async def dida_probe(self, event: AstrMessageEvent):
         """Run a minimal read-only Dida365 API probe."""
@@ -294,6 +296,7 @@ class Main(Star):
             await self._run_service_text(lambda service: service.probe_read_access())
         )
 
+    @filter.permission_type(filter.PermissionType.ADMIN)
     @filter.command("dida_projects")
     async def dida_projects(self, event: AstrMessageEvent):
         """List Dida365 projects with a minimal read-only API call."""
@@ -303,6 +306,7 @@ class Main(Star):
             )
         )
 
+    @filter.permission_type(filter.PermissionType.ADMIN)
     @filter.command("dida_project_data")
     async def dida_project_data(
         self,
@@ -326,6 +330,7 @@ class Main(Star):
         except Exception as exc:
             yield event.plain_result(service.explain_error(exc))
 
+    @filter.permission_type(filter.PermissionType.ADMIN)
     @filter.command("dida_today")
     async def dida_today(self, event: AstrMessageEvent):
         """List tasks due today."""
@@ -335,6 +340,7 @@ class Main(Star):
             )
         )
 
+    @filter.permission_type(filter.PermissionType.ADMIN)
     @filter.command("dida_unfinished")
     async def dida_unfinished(self, event: AstrMessageEvent):
         """List unfinished tasks."""
@@ -344,22 +350,22 @@ class Main(Star):
             )
         )
 
+    @filter.permission_type(filter.PermissionType.ADMIN)
     @filter.command("dida_bind_report_target")
     async def dida_bind_report_target(self, event: AstrMessageEvent):
         """Bind the current session as the proactive report target."""
         await self.put_kv_data(self.REPORT_TARGET_KV_KEY, event.unified_msg_origin)
         await self._sync_report_jobs()
-        yield event.plain_result(
-            "Dida365 report target bound to current session.\n\n"
-            f"- target: {event.unified_msg_origin}",
-        )
+        yield event.plain_result("已将当前会话绑定为滴答清单主动汇报目标。")
 
+    @filter.permission_type(filter.PermissionType.ADMIN)
     @filter.command("dida_report_status")
     async def dida_report_status(self, event: AstrMessageEvent):
         """Show current scheduled report status."""
         await self._sync_report_jobs()
         yield event.plain_result(await self._build_report_status())
 
+    @filter.permission_type(filter.PermissionType.ADMIN)
     @filter.command("dida_do")
     async def dida_do(self, event: AstrMessageEvent, instruction: str = ""):
         """Parse natural-language task instructions with the current session LLM."""
@@ -369,6 +375,7 @@ class Main(Star):
             )
         )
 
+    @filter.permission_type(filter.PermissionType.ADMIN)
     @filter.command("dida_confirm")
     async def dida_confirm(self, event: AstrMessageEvent):
         """Confirm the pending Dida365 task operation in the current chat."""
@@ -378,6 +385,7 @@ class Main(Star):
             )
         )
 
+    @filter.permission_type(filter.PermissionType.ADMIN)
     @filter.command("dida_cancel")
     async def dida_cancel(self, event: AstrMessageEvent):
         """Cancel the pending Dida365 task operation in the current chat."""
